@@ -25,7 +25,7 @@ zk-sync/
 ### 1. Clone the Repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/code-huddle-abdur-rehman/zk-sync.git
 cd zk-sync
 ```
 

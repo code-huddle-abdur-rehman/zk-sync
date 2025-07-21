@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ZKTeco Uploader</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+  <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+    <h3 class="text-2xl font-bold mb-6 text-center text-gray-800">Connect to ZKTeco Device</h3>
+    <div class="space-y-4">
+      <input id="ip" placeholder="Device IP" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
+      <input id="port" placeholder="Port" value="4370" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" disabled />
+      <button id="connectBtn" onclick="connectDevice()" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 transition">Connect</button>
+    </div>
+    <div id="dateSection" class="space-y-4 mt-6 hidden">
+      <label for="start" class="block text-gray-700 font-medium">Start Date</label>
+      <input id="start" type="date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
+      <label for="end" class="block text-gray-700 font-medium">End Date</label>
+      <input id="end" type="date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
+      <button onclick="submitForm()" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">Fetch & Send</button>
+    </div>
+    <div id="attendanceSection" class="mt-8 hidden">
+      <h4 class="text-lg font-semibold mb-2 text-gray-800">Attendance Records</h4>
+      <div id="attendanceTableWrapper"></div>
+    </div>
+    <div class="mt-6">
+      <button onclick="exitApp()" class="w-full bg-red-600 text-white py-2 rounded hover:bg-red-700 transition">Exit Application</button>
+    </div>
+  </div>
+  <script>
+    let connected = false;
+    let ip = '';
+    let port = '4370';
+
+    function toastifyMsg(msg, type = 'info') {
+      Toastify({
+        text: msg,
+        duration: 3500,
+        gravity: "top",
+        position: "right",
+        backgroundColor: type === 'success' ? "#16a34a" : (type === 'error' ? "#dc2626" : "#2563eb"),
+        stopOnFocus: true,
+      }).showToast();
+    }
+
+    async function exitApp() {
+      try {
+        const response = await fetch("/exit", { method: "POST" });
+        if (response.ok) {
+          toastifyMsg("Application shutting down...", "info");
+          // Small delay to show the toast before closing
+          setTimeout(() => {
+            window.close();
+          }, 1000);
+        } else {
+          toastifyMsg("Error exiting application", "error");
+        }
+      } catch (e) {
+        toastifyMsg("Error exiting application: " + e, "error");
+      }
+    }
+
+    async function connectDevice() {
+      ip = document.getElementById("ip").value;
+      port = document.getElementById("port").value;
+      const btn = document.getElementById("connectBtn");
+      btn.disabled = true;
+      btn.textContent = "Connecting...";
+      try {
+        const res = await fetch("/connect", {
+          method: "POST",
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ip: port ? `${ip}:${port}` : ip })
+        });
+        const result = await res.json();
+        if (result.users) {
+          document.getElementById("dateSection").classList.remove("hidden");
+          btn.textContent = "Connected!";
+          btn.classList.remove("bg-green-600");
+          btn.classList.add("bg-green-400", "cursor-not-allowed");
+          btn.disabled = true;
+          toastifyMsg("Connected to device!", "success");
+        } else {
+          toastifyMsg(`Connection failed: ${result.error || "Unknown error"}`, "error");
+          btn.textContent = "Connect";
+          btn.disabled = false;
+        }
+      } catch (e) {
+        toastifyMsg("Connection error: " + e, "error");
+        btn.textContent = "Connect";
+        btn.disabled = false;
+      }
+    }
+
+    async function submitForm() {
+      const start = document.getElementById("start").value;
+      const end = document.getElementById("end").value;
+      const ipVal = document.getElementById("ip").value;
+      const portVal = document.getElementById("port").value;
+      const attendanceSection = document.getElementById("attendanceSection");
+      const tableWrapper = document.getElementById("attendanceTableWrapper");
+      const res = await fetch("/attendance", {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: portVal ? `${ipVal}:${portVal}` : ipVal, startDate: start, endDate: end })
+      });
+      const result = await res.json();
+      if (result.attendance && result.attendance.logs) {
+        const logs = result.attendance.logs;
+        attendanceSection.classList.remove("hidden");
+        if (logs.length === 0) {
+          tableWrapper.innerHTML = '<div class="text-gray-500">No records found for the selected date range.</div>';
+        } else {
+          let table = `<div class="overflow-x-auto"><table class="min-w-full text-sm text-left border border-gray-200"><thead class="bg-gray-100"><tr>
+            <th class="px-4 py-2 border-b">Name</th>
+            <th class="px-4 py-2 border-b">Number</th>
+            <th class="px-4 py-2 border-b">Date/Time</th>
+            <th class="px-4 py-2 border-b">Status</th>
+          </tr></thead><tbody>`;
+          for (const log of logs) {
+            table += `<tr>
+              <td class="px-4 py-2 border-b">${log.name || ''}</td>
+              <td class="px-4 py-2 border-b">${log.number || ''}</td>
+              <td class="px-4 py-2 border-b">${log.dateTime || log.timestamp || ''}</td>
+              <td class="px-4 py-2 border-b">${log.status || ''}</td>
+            </tr>`;
+          }
+          table += '</tbody></table></div>';
+          tableWrapper.innerHTML = table;
+        }
+        // Show upload status as toast
+        if (result.upload && result.upload.success) {
+          toastifyMsg("Attendance uploaded successfully!", "success");
+        } else if (result.upload && result.upload.error) {
+          toastifyMsg(result.upload.error, "error");
+        } else {
+          toastifyMsg("Attendance upload failed.", "error");
+        }
+      } else {
+        attendanceSection.classList.remove("hidden");
+        tableWrapper.innerHTML = `<div class="text-red-500">Error: ${result.error || "Unknown error"}</div>`;
+        toastifyMsg(result.error || "Unknown error", "error");
+      }
+    }
+  </script>
+</body>
+</html>

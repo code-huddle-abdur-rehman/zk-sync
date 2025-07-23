@@ -8,12 +8,26 @@ from zk_utils import fetch_attendance
 from datetime import datetime, timedelta
 import requests
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/devices', methods=['GET'])
+def get_devices():
+    """Get list of available devices from .env file"""
+    devices = []
+    for i in range(1, 3):  # DEVICE_IP_1 and DEVICE_IP_2
+        device_ip = os.getenv(f'DEVICE_IP_{i}')
+        if device_ip:
+            devices.append(device_ip)
+    return jsonify({'devices': devices})
 
 @app.route('/connect', methods=['POST'])
 def connect():
@@ -57,6 +71,8 @@ def attendance():
     ip = data.get('ip')
     start_date = data.get('startDate')
     end_date = data.get('endDate')
+    environment = data.get('environment', 'dev')  # Default to dev if not specified
+    
     if not ip:
         return jsonify({'error': 'IP address is required'}), 400
 
@@ -107,10 +123,16 @@ def attendance():
         for log in logs
     ]
 
+    # Determine backend endpoint based on environment from .env file
+    if environment == 'prod':
+        backend_url = os.getenv('PROD_BACKEND_URL', 'http://localhost:3001/attendance/upload')
+    else:
+        backend_url = os.getenv('DEV_BACKEND_URL', 'http://localhost:3003/attendance/upload')
+
     # Forward to external backend
     try:
         upload_response = requests.post(
-            'http://localhost:3002/attendance/upload',
+            backend_url,
             json=upload_data,
             timeout=10
         )
@@ -124,7 +146,7 @@ def attendance():
             },
             'upload': {
                 'success': False,
-                'error': str(e)
+                'error': f'Failed to upload to {environment} backend: {str(e)}'
             }
         }), 200
 
@@ -135,7 +157,8 @@ def attendance():
         },
         'upload': {
             'success': True,
-            'result': upload_result
+            'result': upload_result,
+            'environment': environment
         }
     })
 

@@ -6,33 +6,101 @@
   <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
   <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center">
-  <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-    <h3 class="text-2xl font-bold mb-6 text-center text-gray-800">Connect to ZKTeco Device</h3>
-    <div class="space-y-4">
-      <input id="ip" placeholder="Device IP" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
-      <input id="port" placeholder="Port" value="4370" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" disabled />
-      <button id="connectBtn" onclick="connectDevice()" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 transition">Connect</button>
+<body class="bg-gray-100 min-h-screen">
+  <!-- Environment Selector -->
+  <div class="fixed top-4 right-4 bg-white p-4 rounded-lg shadow-md">
+    <div class="text-sm font-medium text-gray-700 mb-2">Environment:</div>
+    <div class="flex space-x-2">
+      <button id="devBtn" class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 bg-blue-600 text-white">
+        Development
+      </button>
+      <button id="prodBtn" class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 bg-gray-200 text-gray-700 hover:bg-gray-300">
+        Production
+      </button>
     </div>
-    <div id="dateSection" class="space-y-4 mt-6 hidden">
-      <label for="start" class="block text-gray-700 font-medium">Start Date</label>
-      <input id="start" type="date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
-      <label for="end" class="block text-gray-700 font-medium">End Date</label>
-      <input id="end" type="date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
-      <button onclick="submitForm()" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">Fetch & Send</button>
-    </div>
-    <div id="attendanceSection" class="mt-8 hidden">
-      <h4 class="text-lg font-semibold mb-2 text-gray-800">Attendance Records</h4>
-      <div id="attendanceTableWrapper"></div>
-    </div>
-    <div class="mt-6">
-      <button onclick="exitApp()" class="w-full bg-red-600 text-white py-2 rounded hover:bg-red-700 transition">Exit Application</button>
+  </div>
+
+  <div class="flex items-center min-h-screen px-4">
+    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl mx-auto">
+      <h3 class="text-2xl font-bold mb-6 text-center text-gray-800">Connect to ZKTeco Device</h3>
+      <div class="space-y-4">
+        <select id="deviceSelect" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400">
+          <option value="">Select a device...</option>
+        </select>
+        <button id="connectBtn" onclick="connectDevice()" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 transition">Connect</button>
+      </div>
+      <div id="dateSection" class="space-y-4 mt-6 hidden">
+        <label for="start" class="block text-gray-700 font-medium">Start Date</label>
+        <input id="start" type="date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        <label for="end" class="block text-gray-700 font-medium">End Date</label>
+        <input id="end" type="date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        <button onclick="submitForm()" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">Fetch & Send</button>
+      </div>
+      <div id="attendanceSection" class="mt-8 hidden">
+        <h4 class="text-lg font-semibold mb-2 text-gray-800">Attendance Records</h4>
+        <div id="attendanceTableWrapper"></div>
+      </div>
+      <div class="mt-6">
+        <button onclick="exitApp()" class="w-full bg-red-600 text-white py-2 rounded hover:bg-red-700 transition">Exit Application</button>
+      </div>
     </div>
   </div>
   <script>
     let connected = false;
-    let ip = '';
-    let port = '4370';
+    let selectedDevice = '';
+    let currentEnvironment = 'dev'; // Default to dev
+
+    // Load devices from backend
+    async function loadDevices() {
+      try {
+        const response = await fetch('/devices');
+        const data = await response.json();
+        const deviceSelect = document.getElementById('deviceSelect');
+        
+        // Clear existing options except the first one
+        deviceSelect.innerHTML = '<option value="">Select a device...</option>';
+        
+        // Add device options
+        data.devices.forEach(device => {
+          const option = document.createElement('option');
+          option.value = device;
+          option.textContent = device;
+          deviceSelect.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Failed to load devices:', error);
+        toastifyMsg('Failed to load devices from configuration', 'error');
+      }
+    }
+
+    // Initialize environment buttons
+    function initializeEnvironmentButtons() {
+      const devBtn = document.getElementById('devBtn');
+      const prodBtn = document.getElementById('prodBtn');
+      
+      devBtn.addEventListener('click', () => setEnvironment('dev'));
+      prodBtn.addEventListener('click', () => setEnvironment('prod'));
+    }
+
+    // Set environment and update button styles
+    function setEnvironment(env) {
+      currentEnvironment = env;
+      const devBtn = document.getElementById('devBtn');
+      const prodBtn = document.getElementById('prodBtn');
+      
+      if (env === 'dev') {
+        devBtn.className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 bg-blue-600 text-white';
+        prodBtn.className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 bg-gray-200 text-gray-700 hover:bg-gray-300';
+      } else {
+        devBtn.className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 bg-gray-200 text-gray-700 hover:bg-gray-300';
+        prodBtn.className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 bg-green-600 text-white';
+      }
+    }
+
+    // Get current environment
+    function getCurrentEnvironment() {
+      return currentEnvironment;
+    }
 
     function toastifyMsg(msg, type = 'info') {
       Toastify({
@@ -63,8 +131,12 @@
     }
 
     async function connectDevice() {
-      ip = document.getElementById("ip").value;
-      port = document.getElementById("port").value;
+      selectedDevice = document.getElementById("deviceSelect").value;
+      if (!selectedDevice) {
+        toastifyMsg("Please select a device first", "error");
+        return;
+      }
+
       const btn = document.getElementById("connectBtn");
       btn.disabled = true;
       btn.textContent = "Connecting...";
@@ -72,7 +144,7 @@
         const res = await fetch("/connect", {
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ip: port ? `${ip}:${port}` : ip })
+          body: JSON.stringify({ ip: selectedDevice })
         });
         const result = await res.json();
         if (result.users) {
@@ -97,14 +169,19 @@
     async function submitForm() {
       const start = document.getElementById("start").value;
       const end = document.getElementById("end").value;
-      const ipVal = document.getElementById("ip").value;
-      const portVal = document.getElementById("port").value;
+      const environment = getCurrentEnvironment();
       const attendanceSection = document.getElementById("attendanceSection");
       const tableWrapper = document.getElementById("attendanceTableWrapper");
+      
       const res = await fetch("/attendance", {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ip: portVal ? `${ipVal}:${portVal}` : ipVal, startDate: start, endDate: end })
+        body: JSON.stringify({ 
+          ip: selectedDevice, 
+          startDate: start, 
+          endDate: end,
+          environment: environment
+        })
       });
       const result = await res.json();
       if (result.attendance && result.attendance.logs) {
@@ -132,7 +209,7 @@
         }
         // Show upload status as toast
         if (result.upload && result.upload.success) {
-          toastifyMsg("Attendance uploaded successfully!", "success");
+          toastifyMsg(`Attendance uploaded successfully to ${environment} environment!`, "success");
         } else if (result.upload && result.upload.error) {
           toastifyMsg(result.upload.error, "error");
         } else {
@@ -144,6 +221,12 @@
         toastifyMsg(result.error || "Unknown error", "error");
       }
     }
+
+    // Initialize when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeEnvironmentButtons();
+      loadDevices();
+    });
   </script>
 </body>
 </html>

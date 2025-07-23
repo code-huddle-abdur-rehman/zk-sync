@@ -25,7 +25,7 @@ zk-sync/
 ### 1. Clone the Repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/code-huddle-abdur-rehman/zk-sync.git
 cd zk-sync
 ```
 
@@ -93,6 +93,16 @@ python app.py
    ```
    - The built app will be in the `dist/` folder as `app.app`.
    - Double-click `app.app` to run. The app will open in your browser, and no terminal window will appear.
+4. **Mac 4. Mac-Specific Considerations**
+   - App Bundle vs Executable
+      - PyInstaller creates a .app bundle in the dist folder
+      - Users can double-click the .app file to run it
+      - The .app file is actually a folder (right-click → "Show Package Contents" to see inside)
+   
+   - Gatekeeper Security
+      - Mac may block the app due to security settings
+      - Users may need to right-click → "Open" the first time
+      - Or go to System Preferences → Security & Privacy → "Allow apps from anywhere"
 
 #### **Optional: Create a DMG for Distribution**
 

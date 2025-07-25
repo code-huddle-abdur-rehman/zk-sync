@@ -1,22 +1,31 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>ZKTeco Uploader</title>
+  <title>ZKTeco Uploader - Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
   <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
-  <!-- Environment Selector -->
-  <div class="fixed top-4 right-4 bg-white p-4 rounded-lg shadow-md">
-    <div class="text-sm font-medium text-gray-700 mb-2">Environment:</div>
-    <div class="flex space-x-2">
-      <button id="devBtn" class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 bg-blue-600 text-white">
-        Development
-      </button>
-      <button id="prodBtn" class="px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 bg-gray-200 text-gray-700 hover:bg-gray-300">
-        Production
-      </button>
+  <!-- Header with Environment Indicator and User Info -->
+  <div class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center py-4">
+        <div class="flex items-center">
+          <h1 class="text-xl font-semibold text-gray-900">ZKTeco Uploader</h1>
+        </div>
+        <div class="flex items-center space-x-4">
+          <!-- Environment Indicator -->
+          <div id="environmentIndicator" class="px-3 py-1 rounded-full text-sm font-medium">
+            <!-- Will be populated by JavaScript -->
+          </div>
+          <!-- User Info -->
+          <div class="flex items-center space-x-2">
+            <span id="userEmail" class="text-sm text-gray-700"></span>
+            <button onclick="logout()" class="text-sm text-red-600 hover:text-red-800">Logout</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -50,6 +59,53 @@
     let selectedDevice = '';
     let currentEnvironment = 'dev'; // Default to dev
 
+    // Check authentication on page load
+    function checkAuth() {
+      const accessToken = localStorage.getItem('accessToken');
+      const user = localStorage.getItem('user');
+      const environment = localStorage.getItem('environment');
+      
+      if (!accessToken || !user) {
+        // Redirect to login if not authenticated
+        window.location.href = '/login';
+        return;
+      }
+      
+      // Set current environment and update indicator
+      currentEnvironment = environment || 'dev';
+      updateEnvironmentIndicator();
+      
+      // Display user info
+      try {
+        const userData = JSON.parse(user);
+        document.getElementById('userEmail').textContent = userData.email || 'User';
+      } catch (e) {
+        console.error('Error parsing user data:', e);
+        document.getElementById('userEmail').textContent = 'User';
+      }
+    }
+
+    // Update environment indicator
+    function updateEnvironmentIndicator() {
+      const indicator = document.getElementById('environmentIndicator');
+      if (currentEnvironment === 'dev') {
+        indicator.className = 'px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800';
+        indicator.textContent = 'Development Environment';
+      } else {
+        indicator.className = 'px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800';
+        indicator.textContent = 'Production Environment';
+      }
+    }
+
+    // Logout function
+    function logout() {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      localStorage.removeItem('environment');
+      window.location.href = '/login';
+    }
+
     // Load devices from backend
     async function loadDevices() {
       try {
@@ -71,35 +127,6 @@
         console.error('Failed to load devices:', error);
         toastifyMsg('Failed to load devices from configuration', 'error');
       }
-    }
-
-    // Initialize environment buttons
-    function initializeEnvironmentButtons() {
-      const devBtn = document.getElementById('devBtn');
-      const prodBtn = document.getElementById('prodBtn');
-      
-      devBtn.addEventListener('click', () => setEnvironment('dev'));
-      prodBtn.addEventListener('click', () => setEnvironment('prod'));
-    }
-
-    // Set environment and update button styles
-    function setEnvironment(env) {
-      currentEnvironment = env;
-      const devBtn = document.getElementById('devBtn');
-      const prodBtn = document.getElementById('prodBtn');
-      
-      if (env === 'dev') {
-        devBtn.className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 bg-blue-600 text-white';
-        prodBtn.className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 bg-gray-200 text-gray-700 hover:bg-gray-300';
-      } else {
-        devBtn.className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 bg-gray-200 text-gray-700 hover:bg-gray-300';
-        prodBtn.className = 'px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 bg-green-600 text-white';
-      }
-    }
-
-    // Get current environment
-    function getCurrentEnvironment() {
-      return currentEnvironment;
     }
 
     function toastifyMsg(msg, type = 'info') {
@@ -169,7 +196,6 @@
     async function submitForm() {
       const start = document.getElementById("start").value;
       const end = document.getElementById("end").value;
-      const environment = getCurrentEnvironment();
       const attendanceSection = document.getElementById("attendanceSection");
       const tableWrapper = document.getElementById("attendanceTableWrapper");
       
@@ -180,7 +206,7 @@
           ip: selectedDevice, 
           startDate: start, 
           endDate: end,
-          environment: environment
+          environment: currentEnvironment
         })
       });
       const result = await res.json();
@@ -209,7 +235,7 @@
         }
         // Show upload status as toast
         if (result.upload && result.upload.success) {
-          toastifyMsg(`Attendance uploaded successfully to ${environment} environment!`, "success");
+          toastifyMsg(`Attendance uploaded successfully to ${currentEnvironment} environment!`, "success");
         } else if (result.upload && result.upload.error) {
           toastifyMsg(result.upload.error, "error");
         } else {
@@ -224,7 +250,7 @@
 
     // Initialize when page loads
     document.addEventListener('DOMContentLoaded', function() {
-      initializeEnvironmentButtons();
+      checkAuth();
       loadDevices();
     });
   </script>

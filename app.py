@@ -15,6 +15,21 @@ from functools import wraps
 # Load environment variables
 load_dotenv()
 
+# Check if .env file exists
+env_path = '.env'
+if os.path.exists(env_path):
+    print(f".env file found at: {os.path.abspath(env_path)}")
+else:
+  print(f".env file NOT found at: {os.path.abspath(env_path)}")
+  # Try to find it in the bundle directory
+  bundle_dir = os.path.dirname(os.path.abspath(__file__))
+  bundle_env_path = os.path.join(bundle_dir, '.env')
+  if os.path.exists(bundle_env_path):
+    print(f".env file found in bundle at: {bundle_env_path}")
+    load_dotenv(bundle_env_path)
+  else:
+    print(f".env file not found anywhere!")
+
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')  # Add a secret key for sessions
 
@@ -67,40 +82,32 @@ def login_post():
     backend_url = backend_url.rstrip('/')
     login_url = f"{backend_url}/auth/login"
     
-    # Prepare request payload
-    payload = {
-        'email': email,
-        'password': password,
-        'role': role
-    }
     
     # Call the main backend's login endpoint
     try:
         login_response = requests.post(
             login_url,
-            json=payload,
+            json={
+                'email': email,
+                'password': password,
+                'role': role
+            },
             timeout=10
         )
-        if login_response.status_code == 200 or login_response.status_code == 201:
+        
+        if login_response.status_code:
             login_data = login_response.json()
-            
-            # Convert snake_case tokens to camelCase for frontend
-            tokens = login_data.get('tokens', {})
-            frontend_tokens = {
-                'accessToken': tokens.get('access_token'),
-                'refreshToken': tokens.get('refresh_token')
-            }
             
             # Store user info in session
             session['user_id'] = login_data.get('user', {}).get('_id')
             session['user_email'] = login_data.get('user', {}).get('email')
             session['user_role'] = login_data.get('user', {}).get('role')
             session['environment'] = environment
-            session['access_token'] = frontend_tokens.get('accessToken')
+            session['tokens'] = login_data.get('tokens', {})  # Store tokens in session
             
             return jsonify({
                 'success': True,
-                'tokens': frontend_tokens,
+                'tokens': login_data.get('tokens', {}),
                 'user': login_data.get('user', {})
             })
         else:
@@ -228,37 +235,35 @@ def attendance():
 
     # Determine backend endpoint based on environment from .env file
     if environment == 'prod':
-        backend_url = os.getenv('PROD_BACKEND_URL', 'http://localhost:3001')
+        backend_url = os.getenv('PROD_BACKEND_URL', 'http://localhost:3001/attendance/upload')
     else:
-        backend_url = os.getenv('DEV_BACKEND_URL', 'http://localhost:3003')
+        backend_url = os.getenv('DEV_BACKEND_URL', 'http://localhost:3003/attendance/upload')
 
     backend_url = backend_url.rstrip('/')
-    attendance_url = f"{backend_url}/attendance/upload"
+    upload_url = f"{backend_url}/attendance/upload"
 
-    # Get the access token from session
-    access_token = session.get('access_token')
-    if not access_token:
-        return jsonify({
-            'attendance': {
-                'logs': logs,
-                'userMap': user_map,
-            },
-            'upload': {
-                'success': False,
-                'error': 'No access token found. Please login again.'
-            }
-        }), 200
+    # Get tokens from session
+    tokens = session.get('tokens', {})
+    access_token = tokens.get('accessToken') or tokens.get('access_token')
+    
+    # Prepare headers with authentication
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    
+    if access_token:
+        headers['Authorization'] = f'Bearer {access_token}'
+        print(f"Using access token for authentication")
+    else:
+        print(f"No access token found in session")
 
-    # Forward to external backend with authentication
+    # Forward to external backend
     try:
         upload_response = requests.post(
-            attendance_url,
+            upload_url,
             json=upload_data,
-            headers={
-                'Authorization': f'Bearer {access_token}',
-                'Content-Type': 'application/json'
-            },
-            timeout=10
+            headers=headers,
+            timeout=60
         )
         upload_response.raise_for_status()
         upload_result = upload_response.json() if upload_response.content else {'success': True}

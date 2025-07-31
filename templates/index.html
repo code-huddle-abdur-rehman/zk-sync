@@ -5,6 +5,28 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
   <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+  <style>
+    .spinner {
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #3498db;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      margin-right: 8px;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .btn-loading {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+  </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
   <!-- Header with Environment Indicator and User Info -->
@@ -36,14 +58,18 @@
         <select id="deviceSelect" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400">
           <option value="">Select a device...</option>
         </select>
-        <button id="connectBtn" onclick="connectDevice()" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 transition">Connect</button>
+        <button id="connectBtn" onclick="connectDevice()" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 transition flex items-center justify-center">
+          <span id="connectBtnText">Connect</span>
+        </button>
       </div>
       <div id="dateSection" class="space-y-4 mt-6 hidden">
         <label for="start" class="block text-gray-700 font-medium">Start Date</label>
         <input id="start" type="date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
         <label for="end" class="block text-gray-700 font-medium">End Date</label>
         <input id="end" type="date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
-        <button onclick="submitForm()" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">Fetch & Send</button>
+        <button id="fetchSendBtn" onclick="submitForm()" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition flex items-center justify-center">
+          <span id="fetchSendBtnText">Fetch & Send</span>
+        </button>
       </div>
       <div id="attendanceSection" class="mt-8 hidden">
         <h4 class="text-lg font-semibold mb-2 text-gray-800">Attendance Records</h4>
@@ -165,8 +191,13 @@
       }
 
       const btn = document.getElementById("connectBtn");
+      const btnText = document.getElementById("connectBtnText");
+      
+      // Set loading state
       btn.disabled = true;
-      btn.textContent = "Connecting...";
+      btn.classList.add("btn-loading");
+      btnText.innerHTML = '<span class="spinner"></span>Connecting...';
+
       try {
         const res = await fetch("/connect", {
           method: "POST",
@@ -176,75 +207,104 @@
         const result = await res.json();
         if (result.users) {
           document.getElementById("dateSection").classList.remove("hidden");
-          btn.textContent = "Connected!";
-          btn.classList.remove("bg-green-600");
+          btnText.textContent = "Connected!";
+          btn.classList.remove("bg-green-600", "btn-loading");
           btn.classList.add("bg-green-400", "cursor-not-allowed");
           btn.disabled = true;
           toastifyMsg("Connected to device!", "success");
         } else {
           toastifyMsg(`Connection failed: ${result.error || "Unknown error"}`, "error");
-          btn.textContent = "Connect";
+          // Reset button state
+          btnText.textContent = "Connect";
           btn.disabled = false;
+          btn.classList.remove("btn-loading");
         }
       } catch (e) {
         toastifyMsg("Connection error: " + e, "error");
-        btn.textContent = "Connect";
+        // Reset button state
+        btnText.textContent = "Connect";
         btn.disabled = false;
+        btn.classList.remove("btn-loading");
       }
     }
 
     async function submitForm() {
       const start = document.getElementById("start").value;
       const end = document.getElementById("end").value;
+      
+      if (!start || !end) {
+        toastifyMsg("Please select both start and end dates", "error");
+        return;
+      }
+      
       const attendanceSection = document.getElementById("attendanceSection");
       const tableWrapper = document.getElementById("attendanceTableWrapper");
+      const btn = document.getElementById("fetchSendBtn");
+      const btnText = document.getElementById("fetchSendBtnText");
       
-      const res = await fetch("/attendance", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          ip: selectedDevice, 
-          startDate: start, 
-          endDate: end,
-          environment: currentEnvironment
-        })
-      });
-      const result = await res.json();
-      if (result.attendance && result.attendance.logs) {
-        const logs = result.attendance.logs;
-        attendanceSection.classList.remove("hidden");
-        if (logs.length === 0) {
-          tableWrapper.innerHTML = '<div class="text-gray-500">No records found for the selected date range.</div>';
-        } else {
-          let table = `<div class="overflow-x-auto"><table class="min-w-full text-sm text-left border border-gray-200"><thead class="bg-gray-100"><tr>
-            <th class="px-4 py-2 border-b">Name</th>
-            <th class="px-4 py-2 border-b">Number</th>
-            <th class="px-4 py-2 border-b">Date/Time</th>
-            <th class="px-4 py-2 border-b">Status</th>
-          </tr></thead><tbody>`;
-          for (const log of logs) {
-            table += `<tr>
-              <td class="px-4 py-2 border-b">${log.name || ''}</td>
-              <td class="px-4 py-2 border-b">${log.number || ''}</td>
-              <td class="px-4 py-2 border-b">${log.dateTime || log.timestamp || ''}</td>
-              <td class="px-4 py-2 border-b">${log.status || ''}</td>
-            </tr>`;
+      // Set loading state
+      btn.disabled = true;
+      btn.classList.add("btn-loading");
+      btnText.innerHTML = '<span class="spinner"></span>Fetching & Sending...';
+      
+      try {
+        const res = await fetch("/attendance", {
+          method: "POST",
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            ip: selectedDevice, 
+            startDate: start, 
+            endDate: end,
+            environment: currentEnvironment
+          })
+        });
+        const result = await res.json();
+        
+        if (result.attendance && result.attendance.logs) {
+          const logs = result.attendance.logs;
+          attendanceSection.classList.remove("hidden");
+          if (logs.length === 0) {
+            tableWrapper.innerHTML = '<div class="text-gray-500">No records found for the selected date range.</div>';
+          } else {
+            let table = `<div class="overflow-x-auto"><table class="min-w-full text-sm text-left border border-gray-200"><thead class="bg-gray-100"><tr>
+              <th class="px-4 py-2 border-b">Name</th>
+              <th class="px-4 py-2 border-b">Number</th>
+              <th class="px-4 py-2 border-b">Date/Time</th>
+              <th class="px-4 py-2 border-b">Status</th>
+            </tr></thead><tbody>`;
+            for (const log of logs) {
+              table += `<tr>
+                <td class="px-4 py-2 border-b">${log.name || ''}</td>
+                <td class="px-4 py-2 border-b">${log.number || ''}</td>
+                <td class="px-4 py-2 border-b">${log.dateTime || log.timestamp || ''}</td>
+                <td class="px-4 py-2 border-b">${log.status || ''}</td>
+              </tr>`;
+            }
+            table += '</tbody></table></div>';
+            tableWrapper.innerHTML = table;
           }
-          table += '</tbody></table></div>';
-          tableWrapper.innerHTML = table;
-        }
-        // Show upload status as toast
-        if (result.upload && result.upload.success) {
-          toastifyMsg(`Attendance uploaded successfully to ${currentEnvironment} environment!`, "success");
-        } else if (result.upload && result.upload.error) {
-          toastifyMsg(result.upload.error, "error");
+          // Show upload status as toast
+          if (result.upload && result.upload.success) {
+            toastifyMsg(`Attendance uploaded successfully to ${currentEnvironment} environment!`, "success");
+          } else if (result.upload && result.upload.error) {
+            toastifyMsg(result.upload.error, "error");
+          } else {
+            toastifyMsg("Attendance upload failed.", "error");
+          }
         } else {
-          toastifyMsg("Attendance upload failed.", "error");
+          attendanceSection.classList.remove("hidden");
+          tableWrapper.innerHTML = `<div class="text-red-500">Error: ${result.error || "Unknown error"}</div>`;
+          toastifyMsg(result.error || "Unknown error", "error");
         }
-      } else {
+      } catch (e) {
         attendanceSection.classList.remove("hidden");
-        tableWrapper.innerHTML = `<div class="text-red-500">Error: ${result.error || "Unknown error"}</div>`;
-        toastifyMsg(result.error || "Unknown error", "error");
+        tableWrapper.innerHTML = `<div class="text-red-500">Error: ${e.message || "Network error"}</div>`;
+        toastifyMsg("Network error: " + e.message, "error");
+      } finally {
+        // Reset button state
+        btnText.textContent = "Fetch & Send";
+        btn.disabled = false;
+        btn.classList.remove("btn-loading");
       }
     }
 

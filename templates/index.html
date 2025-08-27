@@ -64,19 +64,20 @@
       </div>
       <div id="dateSection" class="space-y-4 mt-6 hidden">
         <label for="start" class="block text-gray-700 font-medium">Start Date</label>
-        <input id="start" type="date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        <input id="start" type="date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" onchange="updateEndDateMax()" />
         <label for="end" class="block text-gray-700 font-medium">End Date</label>
-        <input id="end" type="date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        <input id="end" type="date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400" onchange="validateEndDate()" />
         <button id="fetchSendBtn" onclick="submitForm()" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition flex items-center justify-center">
           <span id="fetchSendBtnText">Fetch & Send</span>
         </button>
       </div>
-      <div id="attendanceSection" class="mt-8 hidden">
-        <h4 class="text-lg font-semibold mb-2 text-gray-800">Attendance Records</h4>
-        <div id="attendanceTableWrapper"></div>
-      </div>
       <div class="mt-6">
         <button onclick="exitApp()" class="w-full bg-red-600 text-white py-2 rounded hover:bg-red-700 transition">Exit Application</button>
+      </div>
+      <div id="attendanceSection" class="mt-8 hidden">
+        <h4 class="text-lg font-semibold mb-2 text-gray-800">Attendance Records</h4>
+        <div id="redirectLink" class="mb-4"></div>
+        <div id="attendanceTableWrapper"></div>
       </div>
     </div>
   </div>
@@ -207,6 +208,7 @@
         const result = await res.json();
         if (result.users) {
           document.getElementById("dateSection").classList.remove("hidden");
+          setDateConstraints(); // Set date constraints when date section becomes visible
           btnText.textContent = "Connected!";
           btn.classList.remove("bg-green-600", "btn-loading");
           btn.classList.add("bg-green-400", "cursor-not-allowed");
@@ -263,6 +265,10 @@
         if (result.attendance && result.attendance.logs) {
           const logs = result.attendance.logs;
           attendanceSection.classList.remove("hidden");
+          
+          // Update redirect link based on environment
+          updateRedirectLink();
+          
           if (logs.length === 0) {
             tableWrapper.innerHTML = '<div class="text-gray-500">No records found for the selected date range.</div>';
           } else {
@@ -305,6 +311,129 @@
         btnText.textContent = "Fetch & Send";
         btn.disabled = false;
         btn.classList.remove("btn-loading");
+      }
+    }
+
+    // Function to update redirect link based on environment
+    async function updateRedirectLink() {
+      const redirectLinkDiv = document.getElementById('redirectLink');
+      
+      try {
+        // Fetch HRMS URLs from backend
+        const response = await fetch('/hrms-urls');
+        const hrmsUrls = await response.json();
+        
+        const hrmsUrl = currentEnvironment === 'prod' ? hrmsUrls.prod : hrmsUrls.dev;
+        const linkText = currentEnvironment === 'prod' ? 'Go to Production HRMS' : 'Go to Development HRMS';
+        
+        if (hrmsUrl && hrmsUrl !== 'https://hrms.yourcompany.com' && hrmsUrl !== 'https://dev-hrms.yourcompany.com') {
+          redirectLinkDiv.innerHTML = `
+            <a href="${hrmsUrl}" target="_blank" 
+               class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+              </svg>
+              ${linkText}
+            </a>
+          `;
+        } else {
+          // Fallback to default URLs if not configured
+          const defaultUrl = currentEnvironment === 'prod' ? 'https://hrms.yourcompany.com' : 'https://dev-hrms.yourcompany.com';
+          redirectLinkDiv.innerHTML = `
+            <a href="${defaultUrl}" target="_blank" 
+               class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+              </svg>
+              ${linkText}
+            </a>
+          `;
+        }
+      } catch (error) {
+        console.error('Failed to fetch HRMS URLs:', error);
+        // Fallback to default URLs
+        const defaultUrl = currentEnvironment === 'prod' ? 'https://hrms.yourcompany.com' : 'https://dev-hrms.yourcompany.com';
+        const linkText = currentEnvironment === 'prod' ? 'Go to Production HRMS' : 'Go to Development HRMS';
+        
+        redirectLinkDiv.innerHTML = `
+          <a href="${defaultUrl}" target="_blank" 
+             class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+            </svg>
+            ${linkText}
+          </a>
+        `;
+      }
+    }
+
+    // Function to get yesterday's date in YYYY-MM-DD format
+    function getYesterdayDate() {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      return yesterday.toISOString().split('T')[0];
+    }
+
+    // Function to update end date max value based on start date and yesterday
+    function updateEndDateMax() {
+      const startDateInput = document.getElementById('start');
+      const endDateInput = document.getElementById('end');
+      const yesterday = getYesterdayDate();
+      
+      // Set max date for end date to yesterday
+      endDateInput.max = yesterday;
+      
+      // If start date is selected and is after yesterday, reset it
+      if (startDateInput.value && startDateInput.value > yesterday) {
+        startDateInput.value = yesterday;
+        toastifyMsg("Start date cannot be in the future. Set to yesterday.", "error");
+      }
+      
+      // If end date is selected and is after yesterday, reset it
+      if (endDateInput.value && endDateInput.value > yesterday) {
+        endDateInput.value = yesterday;
+        toastifyMsg("End date cannot be in the future. Set to yesterday.", "error");
+      }
+      
+      // If start date is after end date, reset end date to start date
+      if (startDateInput.value && endDateInput.value && startDateInput.value > endDateInput.value) {
+        endDateInput.value = startDateInput.value;
+      }
+    }
+
+    // Function to set initial date constraints
+    function setDateConstraints() {
+      const startDateInput = document.getElementById('start');
+      const endDateInput = document.getElementById('end');
+      const yesterday = getYesterdayDate();
+      
+      // Set max date for both inputs to yesterday
+      startDateInput.max = yesterday;
+      endDateInput.max = yesterday;
+      
+      // Set default values to yesterday for both dates
+      startDateInput.value = yesterday;
+      endDateInput.value = yesterday;
+    }
+
+    // Function to validate end date
+    function validateEndDate() {
+      const startDateInput = document.getElementById('start');
+      const endDateInput = document.getElementById('end');
+      const yesterday = getYesterdayDate();
+      
+      // If end date is after yesterday, reset it
+      if (endDateInput.value && endDateInput.value > yesterday) {
+        endDateInput.value = yesterday;
+        toastifyMsg("End date cannot be in the future. Set to yesterday.", "error");
+        return;
+      }
+      
+      // If end date is before start date, reset it to start date
+      if (startDateInput.value && endDateInput.value && endDateInput.value < startDateInput.value) {
+        endDateInput.value = startDateInput.value;
+        toastifyMsg("End date cannot be before start date. Set to start date.", "error");
+        return;
       }
     }
 

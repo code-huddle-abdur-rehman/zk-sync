@@ -137,6 +137,18 @@ def get_devices():
             devices.append(device_ip)
     return jsonify({'devices': devices})
 
+@app.route('/hrms-urls', methods=['GET'])
+@require_auth
+def get_hrms_urls():
+    """Get HRMS URLs for different environments"""
+    dev_hrms_url = os.getenv('DEV_HRMS_URL', 'https://dev-hrms.yourcompany.com')
+    prod_hrms_url = os.getenv('PROD_HRMS_URL', 'https://hrms.yourcompany.com')
+    
+    return jsonify({
+        'dev': dev_hrms_url,
+        'prod': prod_hrms_url
+    })
+
 @app.route('/connect', methods=['POST'])
 @require_auth
 def connect():

@@ -33,6 +33,12 @@ else:
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')  # Add a secret key for sessions
 
+# Configure session to be more persistent
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
+
 # Authentication decorator
 def require_auth(f):
     @wraps(f)
@@ -75,8 +81,9 @@ def login_post():
         # Determine backend URL based on environment
     if environment == 'prod':
         backend_url = os.getenv('PROD_BACKEND_URL', 'http://localhost:3001')
+        print(f"Using production backend URL: {backend_url}")
     else:
-        backend_url = os.getenv('DEV_BACKEND_URL', 'http://localhost:3003')
+        backend_url = os.getenv('DEV_BACKEND_URL', 'https://code-huddle-hrms-dev-61ae656862e5.herokuapp.com')
     
     # Ensure proper URL construction by removing trailing slash if present
     backend_url = backend_url.rstrip('/')
@@ -92,34 +99,125 @@ def login_post():
                 'password': password,
                 'role': role
             },
+            headers={
+                'Content-Type': 'application/json',
+                'x-tenant': 'default'  # Add required tenant header
+            },
             timeout=10
         )
         
-        if login_response.status_code:
-            login_data = login_response.json()
-            
-            # Store user info in session
-            session['user_id'] = login_data.get('user', {}).get('_id')
-            session['user_email'] = login_data.get('user', {}).get('email')
-            session['user_role'] = login_data.get('user', {}).get('role')
-            session['environment'] = environment
-            session['tokens'] = login_data.get('tokens', {})  # Store tokens in session
-            
-            return jsonify({
-                'success': True,
-                'tokens': login_data.get('tokens', {}),
-                'user': login_data.get('user', {})
-            })
+        
+        if login_response.status_code in [200, 201]:
+            try:
+                login_data = login_response.json()
+                
+                
+                # Try to extract tokens from different possible formats
+                tokens = {}
+                
+                # Check if tokens exist in the response
+                if 'tokens' in login_data and login_data['tokens']:
+                    tokens_data = login_data['tokens']
+                    
+                    # Check for snake_case format first (most common)
+                    if 'access_token' in tokens_data:
+                        tokens = {
+                            'accessToken': tokens_data.get('access_token'),
+                            'refreshToken': tokens_data.get('refresh_token', '')
+                        }
+                    
+                    # Check for camelCase format
+                    elif 'accessToken' in tokens_data:
+                        tokens = tokens_data
+                
+                # Format 3: Direct access_token field
+                elif 'access_token' in login_data:
+                    tokens = {
+                        'accessToken': login_data.get('access_token'),
+                        'refreshToken': login_data.get('refresh_token', '')
+                    }
+                
+                # Format 4: accessToken field
+                elif 'accessToken' in login_data:
+                    tokens = {
+                        'accessToken': login_data.get('accessToken'),
+                        'refreshToken': login_data.get('refreshToken', '')
+                    }
+                
+                # Format 5: Check if tokens are in data field
+                elif 'data' in login_data and 'tokens' in login_data['data']:
+                    tokens = login_data['data']['tokens']
+                
+                # Store user info in session
+                session['user_id'] = login_data.get('user', {}).get('_id')
+                session['user_email'] = login_data.get('user', {}).get('email')
+                session['user_role'] = login_data.get('user', {}).get('role')
+                session['environment'] = environment
+                session['tokens'] = tokens  # Store tokens in session
+                session.permanent = True  # Make session permanent
+                
+                
+                return jsonify({
+                    'success': True,
+                    'tokens': login_data.get('tokens', {}),
+                    'user': login_data.get('user', {})
+                })
+            except Exception as e:
+                return jsonify({
+                    'error': 'Invalid response format from backend'
+                }), 500
         else:
-            error_data = login_response.json() if login_response.content else {}
+            try:
+                error_data = login_response.json() if login_response.content else {}
+            except:
+                error_data = {}
+            
             return jsonify({
-                'error': error_data.get('message', 'Login failed')
+                'error': f'Login failed with status {login_response.status_code}'
             }), login_response.status_code
             
     except requests.exceptions.RequestException as e:
         return jsonify({
             'error': f'Failed to connect to {environment} backend: {str(e)}'
         }), 500
+
+@app.route('/debug-session')
+def debug_session():
+    """Debug endpoint to check session state"""
+    return jsonify({
+        'session_data': dict(session),
+        'session_permanent': session.permanent,
+        'user_id': session.get('user_id'),
+        'tokens': session.get('tokens', {}),
+        'environment': session.get('environment')
+    })
+
+@app.route('/test-session', methods=['POST'])
+def test_session():
+    """Test endpoint to manually set session data"""
+    session['test_token'] = 'test_value_123'
+    session['tokens'] = {'accessToken': 'test_access_token', 'refreshToken': 'test_refresh_token'}
+    session.permanent = True
+    return jsonify({'message': 'Session test data set', 'session': dict(session)})
+
+@app.route('/set-token', methods=['POST'])
+def set_token():
+    """Manual endpoint to set access token for testing"""
+    data = request.json
+    access_token = data.get('accessToken') or data.get('access_token')
+    
+    if access_token:
+        session['tokens'] = {
+            'accessToken': access_token,
+            'refreshToken': data.get('refreshToken', data.get('refresh_token', ''))
+        }
+        session.permanent = True
+        return jsonify({
+            'message': 'Token set successfully',
+            'session': dict(session)
+        })
+    else:
+        return jsonify({'error': 'No access token provided'}), 400
 
 @app.route('/logout')
 def logout():
@@ -247,9 +345,10 @@ def attendance():
 
     # Determine backend endpoint based on environment from .env file
     if environment == 'prod':
-        backend_url = os.getenv('PROD_BACKEND_URL', 'http://localhost:3001/attendance/upload')
+        backend_url = os.getenv('PROD_BACKEND_URL', 'http://localhost:3001')
+        print(f"Using production backend URL: {backend_url}")
     else:
-        backend_url = os.getenv('DEV_BACKEND_URL', 'http://localhost:3003/attendance/upload')
+        backend_url = os.getenv('DEV_BACKEND_URL', 'https://code-huddle-hrms-dev-61ae656862e5.herokuapp.com')
 
     backend_url = backend_url.rstrip('/')
     upload_url = f"{backend_url}/attendance/upload"
@@ -258,16 +357,15 @@ def attendance():
     tokens = session.get('tokens', {})
     access_token = tokens.get('accessToken') or tokens.get('access_token')
     
+    
     # Prepare headers with authentication
     headers = {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-tenant': 'default'  # Add required tenant header
     }
     
     if access_token:
         headers['Authorization'] = f'Bearer {access_token}'
-        print(f"Using access token for authentication")
-    else:
-        print(f"No access token found in session")
 
     # Forward to external backend
     try:
@@ -277,6 +375,7 @@ def attendance():
             headers=headers,
             timeout=60
         )
+        
         upload_response.raise_for_status()
         upload_result = upload_response.json() if upload_response.content else {'success': True}
     except Exception as e:

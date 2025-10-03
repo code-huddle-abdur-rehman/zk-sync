@@ -4,6 +4,7 @@
   <title>ZKTeco Uploader - Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
   <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
   <style>
     .spinner {
@@ -136,7 +137,9 @@
     // Load devices from backend
     async function loadDevices() {
       try {
-        const response = await fetch('/devices');
+        const response = await fetch('/devices', {
+          credentials: 'include'
+        });
         const data = await response.json();
         const deviceSelect = document.getElementById('deviceSelect');
         
@@ -169,7 +172,10 @@
 
     async function exitApp() {
       try {
-        const response = await fetch("/exit", { method: "POST" });
+        const response = await fetch("/exit", { 
+          method: "POST",
+          credentials: 'include'
+        });
         if (response.ok) {
           toastifyMsg("Application shutting down...", "info");
           // Small delay to show the toast before closing
@@ -203,6 +209,7 @@
         const res = await fetch("/connect", {
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ ip: selectedDevice })
         });
         const result = await res.json();
@@ -253,6 +260,7 @@
         const res = await fetch("/attendance", {
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',  // Include cookies for session
           body: JSON.stringify({ 
             ip: selectedDevice, 
             startDate: start, 
@@ -320,7 +328,9 @@
       
       try {
         // Fetch HRMS URLs from backend
-        const response = await fetch('/hrms-urls');
+        const response = await fetch('/hrms-urls', {
+          credentials: 'include'
+        });
         const hrmsUrls = await response.json();
         
         const hrmsUrl = currentEnvironment === 'prod' ? hrmsUrls.prod : hrmsUrls.dev;
